@@ -147,10 +147,3 @@ These permissions are automatically requested when needed.
 4. Test thoroughly on multiple platforms
 5. Submit a pull request
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For issues or questions, please open an issue on the GitHub repository or contact the development team.
