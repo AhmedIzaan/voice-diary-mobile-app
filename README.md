@@ -1,14 +1,15 @@
 # Voice Diary App 📔
 
-A modern voice-to-text diary application built with React Native and Expo that allows users to record their thoughts and memories through voice, automatically transcribe them, and save formatted entries as PDF documents.
+A modern voice-to-text diary application built with React Native and Expo that allows users to record their thoughts and memories through voice, automatically transcribe them using AI, and save formatted entries as PDF documents.
 
 ## Description
 
-Voice Diary is an intuitive mobile app that transforms spoken words into beautifully formatted diary entries. Users can record their thoughts in real-time, see live transcription, and benefit from AI-powered punctuation and formatting. Each entry is automatically saved as a PDF with timestamps and can be viewed, shared, or deleted as needed.
+Voice Diary is an intuitive mobile app that transforms spoken words into beautifully formatted diary entries. Users can record their audio, which is then sent to Google's Gemini AI for transcription with automatic punctuation and capitalization. Each entry is automatically saved as a PDF with timestamps and can be viewed, shared, or deleted as needed.
 
 ### Key Features
-- **Real-time Voice Recording**: Continuous speech recognition with live transcription display
-- **AI-Powered Formatting**: Automatic punctuation and capitalization using Google's Gemini AI
+- **Audio Recording**: Record your voice using expo-av with high-quality m4a format
+- **AI-Powered Transcription**: Automatic transcription using Google's Gemini 2.5 Flash model
+- **Smart Formatting**: AI adds proper punctuation and capitalization automatically
 - **PDF Generation**: Professional-looking diary entries saved as PDF files
 - **Entry Management**: View, share, and delete diary entries
 - **Cross-Platform**: Works on iOS, Android, and Web
@@ -16,11 +17,23 @@ Voice Diary is an intuitive mobile app that transforms spoken words into beautif
 
 ## How It Works
 
-1. **Recording**: Tap the record button to start voice recording
-2. **Live Transcription**: See your words appear in real-time as you speak
-3. **Auto-Formatting**: When recording stops, AI automatically adds proper punctuation and capitalization
-4. **PDF Creation**: Entry is saved as a formatted PDF with date and title
-5. **Management**: Browse your diary entries, share them, or delete unwanted ones
+### New Workflow (Audio Recording + AI Transcription)
+
+1. **Record Audio**: Tap the record button to start recording audio using expo-av
+2. **Stop Recording**: Tap stop to finish - audio is saved as an m4a file
+3. **AI Transcription**: Audio file is sent to Google Gemini 2.5 Flash
+4. **Get Perfect Text**: Gemini returns transcribed text with proper punctuation and capitalization
+5. **PDF Creation**: Entry is saved as a formatted PDF with date and title
+6. **Management**: Browse your diary entries, share them, or delete unwanted ones
+
+### Technical Flow
+```
+User presses Record → expo-av starts recording audio
+User presses Stop → expo-av saves file (recording-*.m4a)
+App sends file to Gemini → "Here is an audio file, write down what you hear"
+Gemini responds → Returns perfect text with punctuation
+App creates PDF → Saves formatted diary entry
+```
 
 ## Frameworks and Tools Used
 
@@ -36,16 +49,17 @@ Voice Diary is an intuitive mobile app that transforms spoken words into beautif
   - `@react-navigation/bottom-tabs ^7.4.0`
 
 ### Speech & Audio
-- **Expo Speech Recognition ^3.0.1**: Real-time speech-to-text functionality
+- **Expo AV ~16.0.8**: Audio recording and playback functionality
 - **Expo Haptics ~15.0.8**: Haptic feedback for user interactions
 
 ### File System & Storage
-- **Expo File System ~19.0.21**: Local file storage and management
+- **Expo File System (Legacy) ~19.0.21**: Local file storage and base64 encoding
 - **Expo Print ~15.0.8**: PDF generation from HTML content
 - **Expo Sharing ~14.0.8**: Share files with other apps
 
 ### AI Integration
-- **Google Gemini AI**: Used for text punctuation and formatting via REST API
+- **Google Generative AI SDK (@google/generative-ai)**: Official Gemini AI SDK for audio transcription
+- **Gemini 2.5 Flash Model**: Advanced AI model for audio-to-text with punctuation
 
 ### UI & Styling
 - **Expo Vector Icons ^15.0.3**: Icon library for consistent UI elements
@@ -86,12 +100,20 @@ cd voice-diary
 npm install
 ```
 
-3. Start the development server:
+3. Configure API Key:
+Create a `.env` file in the root directory (it's already in `.gitignore`):
+```bash
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+
+4. Start the development server:
 ```bash
 npm start
 ```
 
-4. Run on your device/emulator:
+5. Run on your device/emulator:
 ```bash
 # For iOS
 npm run ios
@@ -102,6 +124,26 @@ npm run android
 # For Web
 npm run web
 ```
+
+### Building for Production
+
+To build a release APK:
+
+```bash
+cd android
+./gradlew assembleRelease
+```
+
+The APK will be located at:
+`android/app/build/outputs/apk/release/app-release.apk`
+
+### Installing on Android Device
+
+```bash
+adb install "/path/to/app-release.apk"
+```
+
+Or transfer the APK to your phone and install manually.
 
 ## Project Structure
 
@@ -123,21 +165,44 @@ voice-diary/
 └── scripts/                # Build and utility scripts
 ```
 
-## API Usage
+## API Configuration
 
-The app integrates with Google's Gemini AI API for text formatting. The API key is configured in `utils/ai.js`. Make sure to:
+The app integrates with Google's Gemini 2.5 Flash API for audio transcription. 
 
-1. Obtain a valid Gemini API key from Google AI Studio
-2. Replace the placeholder key in `utils/ai.js`
-3. Keep the API key secure and never commit it to version control
+### Setup:
+
+1. **Get API Key**: Obtain a Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+
+2. **Secure Storage**: Add your key to `.env` file:
+   ```
+   GEMINI_API_KEY=your_api_key_here
+   ```
+
+3. **Environment Variables**: The app reads the key from `app.json` extra config:
+   ```json
+   "extra": {
+     "GEMINI_API_KEY": "your_key_here"
+   }
+   ```
+
+4. **Security Best Practices**:
+   - Never commit API keys to Git
+   - `.env` is already in `.gitignore`
+   - Use EAS Secrets for production builds
+
+### How Transcription Works:
+
+1. Audio recorded as m4a format
+2. File read as base64 using `expo-file-system/legacy`
+3. Sent to Gemini with prompt: "Here is an audio file, write down what you hear"
+4. Gemini returns transcribed text with proper punctuation and capitalization
 
 ## Permissions
 
 The app requires the following permissions:
-- **Microphone**: For voice recording
-- **Speech Recognition**: For converting speech to text (iOS)
+- **Microphone**: For audio recording (Android & iOS)
 
-These permissions are automatically requested when needed.
+Permissions are automatically requested when the user starts recording.
 
 ## Contributing
 
