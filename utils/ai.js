@@ -6,6 +6,10 @@ import { Alert } from 'react-native';
 // Get API key from environment variables
 const GEMINI_API_KEY = Constants.expoConfig?.extra?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
+console.log('API Key from Constants:', Constants.expoConfig?.extra?.GEMINI_API_KEY);
+console.log('API Key from process.env:', process.env.GEMINI_API_KEY);
+console.log('Final API Key:', GEMINI_API_KEY);
+
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Cache to avoid re-processing the same text
