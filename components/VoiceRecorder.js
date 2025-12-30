@@ -1,119 +1,80 @@
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import { Audio } from 'expo-av';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { punctuateText } from '../utils/ai';
+import { transcribeAudio } from '../utils/ai';
 
 export default function VoiceRecorder({ onNewTranscript }) {
     const [isRecording, setIsRecording] = useState(false);
-    const [isPunctuating, setIsPunctuating] = useState(false);
+    const [isTranscribing, setIsTranscribing] = useState(false);
 
-    // Use refs to avoid stale closure issues with event handlers
-    const finalizedTextRef = useRef("");  // Stores all confirmed/final text
-    const currentInterimRef = useRef(""); // Stores the current interim result (not yet final)
-    const shouldBeRecordingRef = useRef(false); // Track if user wants to record
-    const restartTimeoutRef = useRef(null); // For auto-restart
-
-    useSpeechRecognitionEvent("start", () => {
-        setIsRecording(true);
-        shouldBeRecordingRef.current = true;
-    });
-
-    useSpeechRecognitionEvent("end", () => {
-        setIsRecording(false);
-
-        // Auto-restart if user hasn't manually stopped
-        if (shouldBeRecordingRef.current) {
-            console.log("Recording ended unexpectedly, restarting in 100ms...");
-            restartTimeoutRef.current = setTimeout(() => {
-                ExpoSpeechRecognitionModule.start({
-                    lang: "en-US",
-                    interimResults: true,
-                    continuous: true,
-                });
-            }, 100);
-        }
-    });
-
-    useSpeechRecognitionEvent("error", (event) => {
-        console.log("Speech recognition error:", event.error, event.message);
-        setIsRecording(false);
-    });
-
-    useSpeechRecognitionEvent("result", (event) => {
-        // Get only the first (best) result's transcript
-        const transcript = event.results[0]?.transcript || "";
-
-        if (event.isFinal) {
-            // This is a final result - add it to our finalized text
-            if (finalizedTextRef.current) {
-                finalizedTextRef.current = finalizedTextRef.current + " " + transcript;
-            } else {
-                finalizedTextRef.current = transcript;
-            }
-            currentInterimRef.current = "";
-
-            // Update UI with finalized text only
-            onNewTranscript(finalizedTextRef.current);
-        } else {
-            // This is an interim result - show it but don't save it permanently
-            currentInterimRef.current = transcript;
-
-            // Display finalized + current interim for real-time feedback
-            const displayText = finalizedTextRef.current
-                ? finalizedTextRef.current + " " + transcript
-                : transcript;
-            onNewTranscript(displayText);
-        }
-    });
+    const recordingRef = useRef(null);
 
     const toggleRecording = async () => {
         if (isRecording) {
-            // User manually stopping - clear flags and cancel any pending restarts
-            shouldBeRecordingRef.current = false;
-            if (restartTimeoutRef.current) {
-                clearTimeout(restartTimeoutRef.current);
-                restartTimeoutRef.current = null;
-            }
-            ExpoSpeechRecognitionModule.stop();
+            // Stop recording
+            setIsRecording(false);
+            try {
+                await recordingRef.current.stopAndUnloadAsync();
+                const uri = recordingRef.current.getURI();
+                recordingRef.current = null;
 
-            // Apply AI punctuation automatically after stopping
-            const rawText = finalizedTextRef.current;
-            console.log('Stopping recording. Text length:', rawText?.length);
-            console.log('Raw text:', rawText);
+                console.log('Recording stopped. File URI:', uri);
 
-            if (rawText && rawText.length > 10) {
-                console.log('Starting punctuation...');
-                setIsPunctuating(true);
+                // Start transcription
+                setIsTranscribing(true);
                 try {
-                    const punctuatedText = await punctuateText(rawText);
-                    console.log('Received punctuated text:', punctuatedText);
-                    finalizedTextRef.current = punctuatedText;
-                    onNewTranscript(punctuatedText);
+                    const transcribedText = await transcribeAudio(uri);
+                    console.log('Transcribed text:', transcribedText);
+                    onNewTranscript(transcribedText);
                 } catch (error) {
-                    console.error('Punctuation error:', error);
-                    Alert.alert('Error', 'Failed to format text: ' + error.message);
+                    console.error('Transcription error:', error);
+                    Alert.alert('Error', 'Failed to transcribe audio: ' + error.message);
                 } finally {
-                    setIsPunctuating(false);
+                    setIsTranscribing(false);
                 }
-            } else {
-                console.log('Text too short for punctuation:', rawText?.length);
+            } catch (error) {
+                console.error('Error stopping recording:', error);
+                Alert.alert('Error', 'Failed to stop recording: ' + error.message);
+                setIsRecording(false);
             }
         } else {
-            // Starting new recording - reset all text refs
-            finalizedTextRef.current = "";
-            currentInterimRef.current = "";
+            // Start recording
+            try {
+                // Request permissions
+                const { granted } = await Audio.requestPermissionsAsync();
+                if (!granted) {
+                    Alert.alert("Permission needed", "Microphone access is required to record.");
+                    return;
+                }
 
-            const perms = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-            if (!perms.granted) {
-                Alert.alert("Permission needed", "Microphone access is required to record.");
-                return;
+                const recording = new Audio.Recording();
+                await recording.prepareToRecordAsync({
+                    android: {
+                        extension: '.m4a',
+                        outputFormat: 2, // MPEG_4
+                        audioEncoder: 3, // AAC
+                        sampleRate: 44100,
+                        numberOfChannels: 2,
+                        bitRate: 128000,
+                    },
+                    ios: {
+                        extension: '.m4a',
+                        audioQuality: 127, // High
+                        sampleRate: 44100,
+                        numberOfChannels: 2,
+                        bitRate: 128000,
+                        linearPCMBitDepth: 16,
+                        linearPCMIsBigEndian: false,
+                        linearPCMIsFloat: false,
+                    },
+                });
+                await recording.startAsync();
+                recordingRef.current = recording;
+                setIsRecording(true);
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                Alert.alert('Error', 'Failed to start recording: ' + error.message);
             }
-            shouldBeRecordingRef.current = true;
-            ExpoSpeechRecognitionModule.start({
-                lang: "en-US",
-                interimResults: true,
-                continuous: true,
-            });
         }
     };
 
@@ -139,10 +100,10 @@ export default function VoiceRecorder({ onNewTranscript }) {
                     <Text style={styles.statusText}>Recording...</Text>
                 </View>
             )}
-            {isPunctuating && (
+            {isTranscribing && (
                 <View style={styles.statusContainer}>
                     <ActivityIndicator size="small" color="#667eea" />
-                    <Text style={styles.statusText}>Polishing text...</Text>
+                    <Text style={styles.statusText}>Transcribing audio...</Text>
                 </View>
             )}
         </View>
